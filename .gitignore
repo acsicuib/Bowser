@@ -1,3 +1,5 @@
 /logFile.log
 /results/
-.idea/
+/.idea/
+.gitignore
+.DS_Store
