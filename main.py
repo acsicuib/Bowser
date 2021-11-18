@@ -22,21 +22,21 @@ from environment.path_routing import DeviceSpeedAwareRouting
 from environment.manager import BowserManager
 from environment.yafsExtensions import create_applications_from_json
 
-def generate_random_services_and_their_allocations(ratioServicesDeployedOnNodes,debug=True):
+def generate_random_services_and_allocations(graph,ratioServicesDeployedOnNodes,debug=True):
     deploys = []
     if not debug:
-        numberNodes = len(t.G.nodes())
-        numberServices = np.random.randint(1,numberNodes*ratioServicesDeployedOnNodes)
-        available_space = nx.get_node_attributes(t.G, "HwReqs")
+        numberNodes = len(graph.nodes())
+        numberServices = np.random.randint(1,numberNodes* ratioServicesDeployedOnNodes )
+
+        available_space = nx.get_node_attributes(graph, "HwReqs")
         for i in range(numberServices):
             deploy = {}
-            app = np.random.randint(1,len(apps)+1) #un minimo de
+            app = np.random.randint(1,len(apps_level)+1) #un minimo de 1
             deploy["app"] = app
             deploy["module_name"] = "%i_01"%app
             levels = apps_level[app].keys()
-
             candidate_found = False
-            tries_node = 10
+            tries_node = 40
             #Get a candidate node to put an aaplication
             while tries_node > 0 and not candidate_found:
                 candidate_node = np.random.randint(0, numberNodes)
@@ -44,12 +44,14 @@ def generate_random_services_and_their_allocations(ratioServicesDeployedOnNodes,
                 # Get a random flavour how fit in the HW avalablespace
                 while tries_level > 0 and not candidate_found:
                     level = np.random.choice(list(levels), 1)[0]
-                    hw = apps_level[app][level][1]
-                    if int(available_space[candidate_node])+hw >= 0:
+                    hw = apps_level[app][level][0]
+                    if int(available_space[candidate_node])-hw >= 0:
                         available_space[candidate_node] = int(available_space[candidate_node])-hw
                         candidate_found = True
                     else:
                         tries_level -=1
+                        if len(list(levels))==1:
+                            tries_level = 0
 
                 if not candidate_found:
                     tries_node -=1
@@ -66,7 +68,7 @@ def generate_random_services_and_their_allocations(ratioServicesDeployedOnNodes,
         deploy["app"] = 1
         deploy["module_name"] = "%i_01" % 1
         deploy["id_resource"] = 2
-        deploy["level"] = "small"
+        deploy["level"] = "large"
         deploys.append(deploy)
         deploy = {}
         deploy["app"] = 2
@@ -158,10 +160,10 @@ if __name__ == '__main__':
         state = 0
         currentNumberOfSamples = 0
         while currentNumberOfSamples < numberOfSamples:
+            print("Launching one simulation :",numberOfSamples)
             routingPath.clear_routing_cache() # or we can init the variable again
+            data_placements = generate_random_services_and_allocations(t.G,ratioServicesDeployedOnNodes,debug=False) #TODO a debug control
 
-            # Initial allocation of services in the topology
-            data_placements = generate_random_services_and_their_allocations(ratioServicesDeployedOnNodes,debug=True) #TODO a debug control
             if data_placements != None:
                 placements = JSONPlacement(name="Placement", json=data_placements)
             else:
@@ -173,6 +175,7 @@ if __name__ == '__main__':
                 continue
 
 
+
             # Simulation engine
             path_csv_files = temporal_folder_traces + "traces_%s_%i" % (name, state)
             s = Sim(t, default_results_path=path_csv_files)
@@ -181,7 +184,6 @@ if __name__ == '__main__':
             # Initial app deployment in the sim engine according with the placement
             for aName in apps.keys():
                 s.deploy_app(apps[aName], placements, routingPath)
-
 
             # Initial user placement & User request distribution & User deployment for each app
             dataPopulation = generate_random_users_and_their_placements(maxNumberOfUsers)
@@ -198,7 +200,7 @@ if __name__ == '__main__':
 
 
             """
-            BOWSER service controller 
+            BOWSER service controller
             """
             bowserPeriod = int(config.get('BowerManager', 'activation_period'))
             trigger_distribution = deterministic_distribution(name="DET",time=bowserPeriod)
@@ -222,8 +224,10 @@ if __name__ == '__main__':
 
             state +=1
             currentNumberOfSamples += 1
-            if currentNumberOfSamples == 1:
-                currentNumberOfSamples = numberOfSamples
+
+            if currentNumberOfSamples == 1: # TODO DEBUG
+                print("FINNITIQUITOOPOOOOO")
+                numberOfSamples = 1
 
         print("\n\t--- %s seconds ---" % (time.time() - start_time))
 

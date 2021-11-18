@@ -1,24 +1,37 @@
 import logging
 import pandas as pd
-
+from collections import defaultdict
 from yafs.topology import *
 from yafs.distribution import *
+
+# Issues:
+# stay operation (N,S,A,N,F)
 
 # OPERATIONS = ["undeploy", "nop", "migrate", "replicate", "shrink", "evict", "reject", "adapt"]
 FLAVOURS = ["small", "medium", "large"]
 
-OPERATIONS = ["small", "medium", "large"]  # NOTE: flavours/adapt operations should be at the end of this list
-OPERATIONS = ["undeploy", "replicate", "migrate","small", "medium","large"]  # NOTE: flavours/adapt operations should be at the end of this list
-# OPERATIONS = ["undeploy","replicate"]  # NOTE: flavours/adapt operations should be at the end of this list
+
+# NOTE: flavours/adapt operations should be at the end of this list
+OPERATIONS = ["small", "medium", "large"]
+OPERATIONS = ["undeploy", "replicate", "migrate", "small", "medium","large"]
+
+# OPERATIONSIONS = ["undeploy", "small", "medium", "large"]
+# OPERATIONS = ["undeploy","replicate"]
 
 # we can do more cases if
 # OPERATIONS = [undeploy,migrate,migrate,...,migrate, replicate, replicate, ... , replicate]+FLAVOURS
 
 
-# Samples measures
-MEASURES = ["app", "action", "currentFlavour",  # CTS
-            "OdiffReqChannels", 'OreqChannels', 'OsumReq', 'OavgReq', 'OsumLat', 'OavgLat',  # Old State
-            "FdiffReqChannels", 'FreqChannels', 'FsumReq', 'FavgReq', 'FsumLat', 'FavgLat',  # Future State
+# Samples measures order: cts, requests,node, Future_requests, Fnode,
+
+MEASURES = ["app", "currentFlavour","action", # CTS
+            "HWreq",
+            "OdiffReqChannels", 'OreqChannels', 'OsumReq', 'OavgReq', 'OsumLat', 'OavgLat',  # Requests - Old State
+            "HWtotal", "HWfree", "utilization", "degree", "centrality", "nusers",  # Status of the current node
+            #FUTURE
+            "FHWreq",
+            "FdiffReqChannels", 'FreqChannels', 'FsumReq', 'FavgReq', 'FsumLat', 'FavgLat',  # Requests - Future State
+            "FHWtotal", "FHWfree", "Futilization", "Fdegree", "Fcentrality", "Fnusers",  # Status of the current node
             "fit"
             ]
 
@@ -56,18 +69,148 @@ def undeploy_module(sim, service, replicate=False):
 def get_free_space_on_nodes(sim):
     currentOccupation = dict(
         [a, int(x)] for a, x in nx.get_node_attributes(G=sim.topology.G, name="HwReqs").items())
+
     for app in sim.alloc_module:
         dict_module_node = sim.alloc_module[app]  # modules deployed
         for module in dict_module_node:
             for des in dict_module_node[module]:
                 size = sim.get_size_service(app, sim.alloc_level[des])
                 currentOccupation[sim.alloc_DES[des]] -= size
+
     return currentOccupation
 
+def get_app_identifier(nameservice):
+    return int(nameservice[0:nameservice.index("_")])
+
+def get_nodes_with_users(routing):
+    nodes_with_users = defaultdict(list)
+    for (_,node_user,user_service) in routing.controlServices.keys():
+        nodes_with_users[node_user].append(get_app_identifier(user_service))
+    return nodes_with_users
 
 def modify_service_level(sim, id_service, new_level):
     sim.alloc_level[id_service] = new_level
 
+
+def maximun_Request_Level_byApp(apps_level, app):
+    flavours = apps_level[app]
+    f = [flavours[k][1] for k in flavours]
+    ix = f.index(max(f))
+    return (f, list(flavours.keys())[ix])
+
+
+def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
+    # print("*" * 10)
+    # print(Ostatus)
+    # print(operation)
+    # print(Fstatus)
+    # print(current_service)
+    # print(apps_level)
+
+
+    if operation == "undeploy":
+        if "diff_req_channels" in Ostatus["requests"]:
+            if Ostatus["requests"]["diff_req_channels"] > 0:  # there are requests and the service goes out
+                return 0.0
+            if Ostatus["requests"]["diff_req_channels"] == 0:
+                return 1.0
+        else:
+            return 1.0 #There was not requests
+
+    # After undeploy operation, any other operation it's negative whether the node HW utilization >1
+    if Fstatus["node"]["utilization"]>1:
+        return 0.0
+    # There are not requests
+    if "sum_lat" not in Ostatus["requests"]:
+        return 0.0
+
+
+    if operation == "migrate":
+        if "sum_lat" in Fstatus["requests"]:
+            if Ostatus["requests"]["diff_req_channels"] == 1:
+                if Ostatus["requests"]["sum_lat"] > Fstatus["requests"]["sum_lat"]:
+                    return 1.0
+                else:
+                    return 0.0
+            else:
+                return 0.0
+        else:
+            return 0.0
+
+    if operation == "replicate":
+        if Ostatus["requests"]["diff_req_channels"] >= 1:
+            return 1.0
+        else:
+            return 0.0
+
+    if operation in FLAVOURS:  # adapt to small
+        # return adapt_fitness_v1(apps_level,current_service, Ostatus, Fstatus)
+        return adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus)
+
+
+def adapt_fitness_v1(apps_level, current_service, Ostatus, Fstatus):
+    list_supported_requests, max_flavour_name = maximun_Request_Level_byApp(apps_level, current_service["app"])
+    current_requests = Fstatus["requests"]["sum_req"]
+
+    supported_ORequests = apps_level[current_service["app"]][current_service["old_level"]][1]
+    supported_FRequests = apps_level[current_service["app"]][current_service["level"]][1]
+
+    old_flavour = current_service["old_level"]
+    future_flavour = current_service["level"]
+
+    if current_requests > max(list_supported_requests) and old_flavour == max_flavour_name:
+        # print("Impossible to improve better")
+        return 0.0
+
+    if current_requests > max(list_supported_requests) and future_flavour == max_flavour_name:
+        # print("Best adapt flavour possible")
+        return 1.0
+        # print("DONE----")
+
+    predicate = lambda x: x >= current_requests
+    item = next(filter(predicate, list_supported_requests), None)
+    ix_future_flavour = list_supported_requests.index(supported_FRequests)
+    ix_current_flavour = list_supported_requests.index(supported_ORequests)
+
+    if item is not None:  # There is a level that supports the current flow of requests
+        ix_best_flavour = list_supported_requests.index(item)
+        if ix_future_flavour == ix_best_flavour:
+            # print("Best movement")
+            return 1.0
+        if ix_future_flavour < ix_best_flavour:
+            # print("Worst movement")
+            return 0.0
+
+        if ix_future_flavour > ix_best_flavour:
+            # print("It's good but it can be better")
+            numberFlavours = len(list_supported_requests)
+            return (numberFlavours - ix_future_flavour + ix_best_flavour) / numberFlavours
+
+    if item is None:
+        # we need to look for the best, we need the last
+        # ix_best_flavour = len(list_supported_requests) - 1
+        return ((ix_future_flavour + 1) / len(list_supported_requests))  # distance to the best one
+
+def adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus):
+    list_supported_requests, max_flavour_name = maximun_Request_Level_byApp(apps_level, current_service["app"])
+
+    if len(Fstatus["requests"])==0: #Empty request
+        return 0.0 # An adapt operation when there are not requests
+
+    current_requests = Fstatus["requests"]["sum_req"]
+    supported_FRequests = apps_level[current_service["app"]][current_service["level"]][1]
+
+    rate =  current_requests / float(supported_FRequests)
+    predicate = lambda x: x >= current_requests
+    item = next(filter(predicate, list_supported_requests), None)
+
+    if item is not None:
+        if supported_FRequests > item:  # This adaptation is over-dimensioned
+            return rate
+        else:
+            return 1.0
+    else:
+        return rate
 
 class BowserManager():
     def __init__(self, path_csv_traces, path_results, apps_level, iteration):
@@ -121,7 +264,7 @@ class BowserManager():
         """
         # print("\nBOWSER IS HERE: Number of Service Managed: ", (self.ixService + 1))
         # print("*" * 30)
-
+        # sim.print_debug_assignaments()
         # Next if-block runs one time:
         # We get the list of deployed services in the infrastructure &
         # We get the list of available resources in the nodes.
@@ -136,14 +279,15 @@ class BowserManager():
                              "old_level": sim.alloc_level[des], "level": sim.alloc_level[des]})
                         id += 1
 
-            self.available_HW_on_nodes = get_free_space_on_nodes(
-                sim)  # double check, but there're always space due to rules
+            self.degree_centrality = nx.degree_centrality(sim.topology.G)
+            self.node_with_users = get_nodes_with_users(routing)
 
         # State 0
         if self.current_service is None:
             self.ixService += 1
             self.current_ioperation = 0
-            if self.ixService == 1:  # len(self.all_deployed_services): #TODO Swap len() to int value for DEBUG -ing
+            # if self.ixService == 1:  # len(self.all_deployed_services): #TODO Swap len() to int value for DEBUG -ing
+            if self.ixService == len(self.all_deployed_services): #TODO Swap len() to int value for DEBUG -ing
                 sim.stop = True
                 return None
 
@@ -182,11 +326,9 @@ class BowserManager():
 
                 operation = OPERATIONS[self.current_ioperation]  # next available operation
             # end while
-
             # We measure the performance status of the service in the current situation
             status = self.get_service_status(sim, routing, self.current_service)
             self.Ostatus = status
-            # TODO store the status if the action is done
             self.storeStatus(status, operation, self.current_service, state="DO")
 
             # print("\n\nDO\n",status)
@@ -196,7 +338,6 @@ class BowserManager():
 
             # We will only consider requests from now on in the trace file.
             self.do_time = sim.env.now
-
             # We perform the action
             self.action_done = self.do_action(sim, operation, self.current_service)
 
@@ -209,12 +350,12 @@ class BowserManager():
             # We undo the operation
             if self.action_done:
                 operation = OPERATIONS[self.current_ioperation]
-                Fstatus = self.get_service_status(sim, routing, self.current_service)
+                Fstatus = self.get_service_status(sim, routing, self.current_service, empty=(operation == "undeploy"))
 
                 # we compute the fitness
-                valueFit = self.computeFitness(self.current_service,operation,self.Ostatus,Fstatus)
+                valueFit = computeFitness(self.apps_level, self.current_service, operation, self.Ostatus, Fstatus)
 
-                self.storeStatus(Fstatus, operation, self.current_service, state="UNDO",fit=valueFit)
+                self.storeStatus(Fstatus, operation, self.current_service, state="UNDO", fit=valueFit)
 
                 # print("UNDO\n",status)
                 # print(self.current_service)
@@ -228,8 +369,7 @@ class BowserManager():
             if self.current_ioperation == len(OPERATIONS):
                 self.current_service = None
 
-
-    def storeStatus(self, status, operation, current_service, state,fit=None):
+    def storeStatus(self, status, operation, current_service, state, fit=None):
         """
 
         :param status:
@@ -239,7 +379,14 @@ class BowserManager():
         :return:
         """
         if state == "DO":
-            self.sample_state = str(current_service["app"]) + "," + current_service["old_level"] + "," + operation + ","
+            self.sample_state = str(current_service["app"]) + "," + current_service["old_level"] + "," + operation + "," #CTS FACTS
+
+            HWreq = self.apps_level[current_service["app"]][current_service["old_level"]][1]
+        else:
+            HWreq = self.apps_level[current_service["app"]][current_service["level"]][1]
+
+
+        self.sample_state += str(HWreq)+","
 
         # Requests
         attrs = status["requests"]
@@ -248,11 +395,16 @@ class BowserManager():
         if len(attrs) == 0:
             self.sample_state += ("0," * 6)
 
-        # TODO include more measures
+        # Node Info
+        attrs = status["node"]
+        for key in attrs:
+            self.sample_state += str(attrs[key]) + ","
+
+        # TODO include more measures :colums
 
         # We include the fit
         if fit is not None:
-            self.sample_state += "%f,"%fit
+            self.sample_state += "%f," % fit
 
         # we undo the operation, we can store all the measures of a action, old_state, future_state, & fit
         if state == "UNDO":
@@ -260,7 +412,7 @@ class BowserManager():
             with open(self.path_results + self.samples_file, "a") as f:
                 f.write(self.sample_state + "\n")
 
-    def get_service_status(self, sim, routing, service):
+    def get_service_status(self, sim, routing, service, empty=False):
         """
             Get performance indicators of the service
 
@@ -307,19 +459,21 @@ class BowserManager():
         #     stats = {"requests": listOfRequests}
 
         df2 = df[self.last_CSVpointer:]
-        self.last_CSVpointer = len(df)
         df2 = df2[df2["time_emit"] >= self.do_time]
+        self.last_CSVpointer = len(df)
 
-        listOfRequests = self.__get_requests(sim, routing, service, df2)
+        listOfRequests = self.__get_requests(sim, routing, service, df2, empty)
 
-        # TODO Include more metrics
-        stats = {"requests": listOfRequests}
+        nodeInfo = self.__get_node_info(sim,routing,service)
+
+        # TODO Include more metrics :columsa´´´´´´´çç
+        stats = {"requests": listOfRequests,"node":nodeInfo}
 
         return stats
 
     def do_action(self, sim, operation, service):
         if operation == "undeploy":
-            undeploy_module(sim, service)
+            # undeploy_module(sim, service) # We can ignore this operation since the State without this service is always all zeros.
             return True
 
         if operation in FLAVOURS:
@@ -363,7 +517,8 @@ class BowserManager():
 
     def undo_action(self, sim, operation, service):
         if operation == "undeploy":
-            deploy_module(sim, service)
+            # deploy_module(sim, service)
+            pass
         if operation in FLAVOURS:
             self.current_service["level"] = self.current_service["old_level"]
             modify_service_level(sim, self.current_service["des"], self.current_service["old_level"])
@@ -373,7 +528,15 @@ class BowserManager():
         if operation == "replicate":
             undeploy_module(sim, service, replicate=True)
 
-    def __get_requests(self, sim, routing, service, df):
+    def __get_requests(self, sim, routing, service, df, empty=False):
+        if empty:
+            return {"diff_req_channels": 0,
+                    "req_channels": 0,
+                    "sum_req": 0,
+                    "avg_req": 0,
+                    "sum_lat": 0,
+                    "avg_lat": 0}
+
         # df.to_csv("debug1.csv") # DEBUG
         df = df[df["DES.dst"] == service["des"]]
         latencies = []
@@ -405,3 +568,26 @@ class BowserManager():
         else:
             self.logger.warning("WARN - There are not new messages among users and service")
             return {}
+
+    def __get_node_info(self,sim,routing,service):
+
+        self.available_HW_on_nodes = get_free_space_on_nodes(sim)  # double check, but there're always space due to rules
+
+        node = sim.alloc_DES[service["des"]]
+
+        degree = sim.topology.G.degree(node)
+        HWtotal = float(sim.topology.G.nodes[node]["HwReqs"])
+        HWused = self.available_HW_on_nodes[node]
+        centrality = self.degree_centrality[node]
+        nUsers = len(self.node_with_users[node])
+
+        data = {}
+        data["HWtotal"] = HWtotal
+        data["HWfree"] = HWused
+        data["utilization"] = (HWtotal-HWused)/HWtotal
+        data["degree"] = degree
+        data["centrality"] = centrality
+        data["nusers"] = nUsers
+
+        return data
+
