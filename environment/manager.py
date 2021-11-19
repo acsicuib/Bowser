@@ -24,7 +24,8 @@ OPERATIONS = ["undeploy", "replicate", "migrate", "small", "medium","large"]
 
 # Samples measures order: cts, requests,node, Future_requests, Fnode,
 
-MEASURES = ["app", "currentFlavour","action", # CTS
+MEASURES = ["sim", #simulation id.
+            "app", "currentFlavour","action", # CTS
             "HWreq",
             "OdiffReqChannels", 'OreqChannels', 'OsumReq', 'OavgReq', 'OsumLat', 'OavgLat',  # Requests - Old State
             "HWtotal", "HWfree", "utilization", "degree", "centrality", "nusers",  # Status of the current node
@@ -35,6 +36,11 @@ MEASURES = ["app", "currentFlavour","action", # CTS
             "fit"
             ]
 
+
+def write_header(file):
+    with open(file, "w") as f:
+        columns = ",".join([item for item in MEASURES])
+        f.write(columns + "\n")
 
 def deploy_module(sim, service, node_dst=None, replicate=False):
     app = sim.apps[service["app"]]
@@ -213,7 +219,7 @@ def adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus):
         return rate
 
 class BowserManager():
-    def __init__(self, path_csv_traces, path_results, apps_level, iteration):
+    def __init__(self, path_csv_traces, path_results, apps_level, samples_file, iteration):
         self.logger = logging.getLogger(__name__)
         self.apps_level = apps_level
         self.all_deployed_services = None  # list of the deployed services
@@ -232,12 +238,15 @@ class BowserManager():
         self.iteration = iteration
         self.path_results = path_results
         self.sample_state = ""
+        self.number_samples = 0
 
         # Store stats, the simulation samples
-        self.samples_file = "samples.csv"
-        with open(self.path_results + self.samples_file, "w") as f:
-            columns = ",".join([item for item in MEASURES])
-            f.write(columns + "\n")
+        self.samples_file = samples_file
+        # with open(self.path_results + self.samples_file, "w") as f:
+        #     columns = ",".join([item for item in MEASURES])
+        #     f.write(columns + "\n")
+
+
 
     def get_latency(self, path, topology):
         speed = 0
@@ -379,7 +388,7 @@ class BowserManager():
         :return:
         """
         if state == "DO":
-            self.sample_state = str(current_service["app"]) + "," + current_service["old_level"] + "," + operation + "," #CTS FACTS
+            self.sample_state = str(self.iteration)+","+str(current_service["app"]) + "," + current_service["old_level"] + "," + operation + "," #CTS FACTS
 
             HWreq = self.apps_level[current_service["app"]][current_service["old_level"]][1]
         else:
@@ -411,6 +420,7 @@ class BowserManager():
             self.sample_state = self.sample_state[:-1]
             with open(self.path_results + self.samples_file, "a") as f:
                 f.write(self.sample_state + "\n")
+                self.number_samples += 1
 
     def get_service_status(self, sim, routing, service, empty=False):
         """

@@ -11,6 +11,8 @@ import logging.config
 import networkx as nx
 from configparser import ConfigParser
 
+from environment.manager import write_header
+
 from yafs.core import Sim
 from yafs.topology import Topology
 from yafs.distribution import *
@@ -26,7 +28,7 @@ def generate_random_services_and_allocations(graph,ratioServicesDeployedOnNodes,
     deploys = []
     if not debug:
         numberNodes = len(graph.nodes())
-        numberServices = np.random.randint(1,numberNodes* ratioServicesDeployedOnNodes )
+        numberServices = np.random.randint(1,numberNodes * ratioServicesDeployedOnNodes )
 
         available_space = nx.get_node_attributes(graph, "HwReqs")
         for i in range(numberServices):
@@ -132,7 +134,7 @@ if __name__ == '__main__':
 
         config = ConfigParser()
         config.read(case_path + 'config.ini')
-        numberOfSamples = int(config.get('simulation', 'numberOfSamples'))
+        minNumberOfSamples = int(config.get('simulation', 'minNumberOfSamples'))
         seed = int(config.get('simulation', 'seed'))
 
         ratioServicesDeployedOnNodes = float(config.get('services', 'deployedOnNodes'))
@@ -159,8 +161,13 @@ if __name__ == '__main__':
         bizarre_situations = 0
         state = 0
         currentNumberOfSamples = 0
-        while currentNumberOfSamples < numberOfSamples:
-            print("Launching one simulation :",numberOfSamples)
+
+        file_samples = "samples.csv"
+
+        write_header(temporal_folder + file_samples)
+
+        while currentNumberOfSamples < minNumberOfSamples:
+            print("Launching one simulation")
             routingPath.clear_routing_cache() # or we can init the variable again
             data_placements = generate_random_services_and_allocations(t.G,ratioServicesDeployedOnNodes,debug=False) #TODO a debug control
 
@@ -208,6 +215,7 @@ if __name__ == '__main__':
             bowser = BowserManager(path_csv_traces = path_csv_files,
                                    path_results=temporal_folder,
                                    apps_level = apps_level,
+                                   samples_file=file_samples,
                                    iteration=state
                                    )
 
@@ -222,12 +230,12 @@ if __name__ == '__main__':
             s.run(10000000000) # Bowser stops the simulation when check all available services per operation
             #TODO fix the number in function of the services x operations x period
 
-            state +=1
-            currentNumberOfSamples += 1
+            state += 1
+            currentNumberOfSamples += bowser.number_samples
 
-            if currentNumberOfSamples == 1: # TODO DEBUG
-                print("FINNITIQUITOOPOOOOO")
-                numberOfSamples = 1
+            # if currentNumberOfSamples == 1: # TODO DEBUG
+            #     print("FINNITIQUITOOPOOOOO")
+            #     numberOfSamples = 1
 
         print("\n\t--- %s seconds ---" % (time.time() - start_time))
 

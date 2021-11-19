@@ -1,0 +1,47 @@
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Nov 15 16:03:52 2021
+
+Version 2: use the RR/HW_level
+@author: isaaclera
+"""
+
+
+   
+list_supported_requests = [5,18,19,20,25]
+names = ["small","m1","m2","m3","large"]
+max_flavour_name = "large"
+
+
+actual = 0
+supported_CRequests=list_supported_requests[actual]
+current_service = names[actual]
+
+
+future = 4
+supported_FRequests=list_supported_requests[future]
+future_service = names[future]
+
+
+current_requests = 204
+
+rate =  supported_FRequests / float(current_requests)
+print(rate)
+
+# es la mejor o aún es más grande de lo necesario
+predicate = lambda x: x >= current_requests
+item = next(filter(predicate, list_supported_requests), None)
+
+if item is not None:
+    if supported_FRequests > item:
+        print(1/rate)
+        print(0.99)
+
+    else:
+        print(rate)
+else:
+    print(min(rate,1))
+    
+    
