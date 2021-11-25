@@ -329,9 +329,9 @@ class BowserManager():
         :param case_folder:
         :return:
         """
-        print("\nBOWSER IS HERE: Number of Service Managed: ", (self.ixService + 1))
-        print("*" * 30)
-        sim.print_debug_assignaments()
+        # print("\nBOWSER IS HERE: Number of Service Managed: ", (self.ixService + 1))
+        # print("*" * 30)
+        # sim.print_debug_assignaments()
         # Next if-block runs one time:
         # We get the list of deployed services in the infrastructure &
         # We get the list of available resources in the nodes.
@@ -400,10 +400,10 @@ class BowserManager():
             self.Ostatus = status
             self.storeStatus(status, operation, self.current_service, state="DO")
 
-            print("\n\nDO\n",status)
-            print(operation)
-            print(self.current_service)
-            print("DO.tIME ",sim.env.now)
+            # print("\n\nDO\n",status)
+            # print(operation)
+            # print(self.current_service)
+            # print("DO.tIME ",sim.env.now)
 
             # We will only consider requests from now on in the trace file.
             self.do_time = sim.env.now
