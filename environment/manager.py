@@ -24,18 +24,67 @@ OPERATIONS = ["undeploy", "replicate", "migrate", "small", "medium","large"]
 
 # Samples measures order: cts, requests,node, Future_requests, Fnode,
 
-MEASURES = ["sim", #simulation id.
-            "app", "currentFlavour","action", # CTS
-            "HWreq",
-            "OdiffReqChannels", 'OreqChannels', 'OsumReq', 'OavgReq', 'OsumLat', 'OavgLat',  # Requests - Old State
-            "HWtotal", "HWfree", "utilization", "degree", "centrality", "nusers",  # Status of the current node
-            #FUTURE
-            "FHWreq",
-            "FdiffReqChannels", 'FreqChannels', 'FsumReq', 'FavgReq', 'FsumLat', 'FavgLat',  # Requests - Future State
-            "FHWtotal", "FHWfree", "Futilization", "Fdegree", "Fcentrality", "Fnusers",  # Status of the current node
-            "fit"
-            ]
+# MEASURES = ["sim", #simulation id.
+#             "app", "currentFlavour","action", # CTS
+#             "HWreq",
+#             "OdiffReqChannels", 'OreqChannels', 'OsumReq', 'OavgReq', 'OsumLat', 'OavgLat',  # Requests - Old State
+#             "HWtotal", "HWfree", "utilization", "degree", "centrality", "nusers",  # Status of the current node
+#             #FUTURE
+#             "FHWreq",
+#             "FdiffReqChannels", 'FreqChannels', 'FsumReq', 'FavgReq', 'FsumLat', 'FavgLat',  # Requests - Future State
+#             "FHWtotal", "FHWfree", "Futilization", "Fdegree", "Fcentrality", "Fnusers",  # Status of the current node
+#             "fit"
+#             ]
 
+MEASURES = [ "Sim","Action",
+             #==== Service information in the current node previous to the action
+            "App",
+            "CurrentFlavour",
+            "SupportedRequests",
+            "HWReq",
+            # ==== Request data
+            "DifReqChannels",
+            "TotReqChannels",
+            "SumRequests",
+            "AvgRequests",
+            "SumLat",
+            "AvgLat",
+            # ==== Node data
+            "HWTotal",
+            "HWUsed",  #(included the current service)
+            "Utilization",
+            "Degree",
+            "Centrality",
+            "ConnectedUsers",#[0,n]
+             #==== Destinate Node
+
+            "DstHWUsed", #(not include the current service)
+            "DstUtilization" ,#(not include the current service)
+
+            # ----
+            # Future State
+            # ----
+            # Service information in the new position
+            #"NextFlavour",
+            "NextSupportedRequests",
+            "NextHWReq",
+            "NextDifReqChannels",
+            "NextTotReqChannels",
+            "NextSumRequests",
+            "NextAvgRequests",
+            "NextSumLat",
+            "NextAvgLat",
+
+            # Impact of the new service in the current node
+            "DstHWTotal",
+            "NextHWUsed",# (including the current service)
+            "NextUtilization",
+            "DstDegree",
+            "DstCentrality",
+            "DstConnectedUsers",
+
+            "Reward"
+]
 
 def write_header(file):
     with open(file, "w") as f:
@@ -115,26 +164,28 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
 
 
     if operation == "undeploy":
-        if "diff_req_channels" in Ostatus["requests"]:
-            if Ostatus["requests"]["diff_req_channels"] > 0:  # there are requests and the service goes out
+        if "DifReqChannels" in Ostatus["requests"]:
+            if Ostatus["requests"]["DifReqChannels"] > 0:  # there are requests and the service goes out
                 return 0.0
-            if Ostatus["requests"]["diff_req_channels"] == 0:
+            if Ostatus["requests"]["DifReqChannels"] == 0:
                 return 1.0
         else:
             return 1.0 #There was not requests
 
     # After undeploy operation, any other operation it's negative whether the node HW utilization >1
-    if Fstatus["node"]["utilization"]>1:
+    if Fstatus["node"]["Utilization"]>1:
         return 0.0
+
     # There are not requests
-    if "sum_lat" not in Ostatus["requests"]:
+    # The only viable operation is UNDEPLOY
+    if "SumLat" not in Ostatus["requests"]:
         return 0.0
 
 
     if operation == "migrate":
-        if "sum_lat" in Fstatus["requests"]:
-            if Ostatus["requests"]["diff_req_channels"] == 1:
-                if Ostatus["requests"]["sum_lat"] > Fstatus["requests"]["sum_lat"]:
+        if "NextSumLat" in Fstatus["requests"]:
+            if Ostatus["requests"]["DifReqChannels"] == 1:
+                if Ostatus["requests"]["SumLat"] > Fstatus["requests"]["NextSumLat"]:
                     return 1.0
                 else:
                     return 0.0
@@ -144,10 +195,17 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
             return 0.0
 
     if operation == "replicate":
-        if Ostatus["requests"]["diff_req_channels"] >= 1:
-            return 1.0
+        if Ostatus["requests"]["DifReqChannels"] > 1 and current_service["SupportedRequests"]<Ostatus["requests"]["SumRequests"]:
+             if "SumLat" not in Fstatus["requests"]: #The current service not receive requests
+                return 0.0
+             else:
+                return 1.0
         else:
+            # Si la utilizacion es mayor que 1, pero solo hay un canal es mejor una migración
             return 0.0
+
+
+
 
     if operation in FLAVOURS:  # adapt to small
         # return adapt_fitness_v1(apps_level,current_service, Ostatus, Fstatus)
@@ -156,7 +214,7 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
 
 def adapt_fitness_v1(apps_level, current_service, Ostatus, Fstatus):
     list_supported_requests, max_flavour_name = maximun_Request_Level_byApp(apps_level, current_service["app"])
-    current_requests = Fstatus["requests"]["sum_req"]
+    current_requests = Fstatus["requests"]["SumRequests"]
 
     supported_ORequests = apps_level[current_service["app"]][current_service["old_level"]][1]
     supported_FRequests = apps_level[current_service["app"]][current_service["level"]][1]
@@ -203,7 +261,7 @@ def adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus):
     if len(Fstatus["requests"])==0: #Empty request
         return 0.0 # An adapt operation when there are not requests
 
-    current_requests = Fstatus["requests"]["sum_req"]
+    current_requests = Fstatus["requests"]["SumRequests"]
     supported_FRequests = apps_level[current_service["app"]][current_service["level"]][1]
 
     rate =  current_requests / float(supported_FRequests)
@@ -271,9 +329,9 @@ class BowserManager():
         :param case_folder:
         :return:
         """
-        # print("\nBOWSER IS HERE: Number of Service Managed: ", (self.ixService + 1))
-        # print("*" * 30)
-        # sim.print_debug_assignaments()
+        print("\nBOWSER IS HERE: Number of Service Managed: ", (self.ixService + 1))
+        print("*" * 30)
+        sim.print_debug_assignaments()
         # Next if-block runs one time:
         # We get the list of deployed services in the infrastructure &
         # We get the list of available resources in the nodes.
@@ -285,7 +343,9 @@ class BowserManager():
                     for des in sim.alloc_module[app][service]:
                         self.all_deployed_services.append(
                             {"id": id, "app": app, "des": des, "service_name": service, "node": sim.alloc_DES[des],
-                             "old_level": sim.alloc_level[des], "level": sim.alloc_level[des]})
+                             "old_level": sim.alloc_level[des], "level": sim.alloc_level[des],
+                             "SupportedRequests": self.apps_level[app][sim.alloc_level[des]][1]
+                             })
                         id += 1
 
             self.degree_centrality = nx.degree_centrality(sim.topology.G)
@@ -340,10 +400,10 @@ class BowserManager():
             self.Ostatus = status
             self.storeStatus(status, operation, self.current_service, state="DO")
 
-            # print("\n\nDO\n",status)
-            # print(operation)
-            # print(self.current_service)
-            # print("DO.tIME ",sim.env.now)
+            print("\n\nDO\n",status)
+            print(operation)
+            print(self.current_service)
+            print("DO.tIME ",sim.env.now)
 
             # We will only consider requests from now on in the trace file.
             self.do_time = sim.env.now
@@ -359,6 +419,8 @@ class BowserManager():
             # We undo the operation
             if self.action_done:
                 operation = OPERATIONS[self.current_ioperation]
+
+
                 Fstatus = self.get_service_status(sim, routing, self.current_service, empty=(operation == "undeploy"))
 
                 # we compute the fitness
@@ -387,29 +449,48 @@ class BowserManager():
         :param state:
         :return:
         """
-        if state == "DO":
-            self.sample_state = str(self.iteration)+","+str(current_service["app"]) + "," + current_service["old_level"] + "," + operation + "," #CTS FACTS
+        if state == "DO": # Pre-Action Data
+            self.sample_state = str(self.iteration)+","+ operation + "," + str(current_service["app"]) + "," + current_service["old_level"] + ","  #CTS FACTS
 
-            HWreq = self.apps_level[current_service["app"]][current_service["old_level"]][1]
+            SReq  = self.apps_level[current_service["app"]][current_service["old_level"]][1]
+            HWreq = self.apps_level[current_service["app"]][current_service["old_level"]][0]
+            self.sample_state += str(SReq) + "," + str(HWreq) + ","
         else:
-            HWreq = self.apps_level[current_service["app"]][current_service["level"]][1]
+            SReq = self.apps_level[current_service["app"]][current_service["level"]][1]
+            HWreq = self.apps_level[current_service["app"]][current_service["level"]][0]
+
+            if operation != "undeploy":
+                # self.sample_state += "NN,"
+
+                self.sample_state += str(self.current_service["DSTNode"]["DstHWUsed"])+ ","
+                self.sample_state += str(self.current_service["DSTNode"]["DstUtilization"])+ ","
+
+                # self.sample_state +="FNN,"
+            else:
+                self.sample_state += ("0," * 2)
+
+            self.sample_state += str(SReq) + "," + str(HWreq) + ","
 
 
-        self.sample_state += str(HWreq)+","
 
-        # Requests
+        # self.sample_state += "IR,"
         attrs = status["requests"]
         for key in attrs:
             self.sample_state += str(attrs[key]) + ","
         if len(attrs) == 0:
             self.sample_state += ("0," * 6)
 
-        # Node Info
+        # self.sample_state += "FR,"
+
+        # self.sample_state += "IN,"
+
+
         attrs = status["node"]
         for key in attrs:
             self.sample_state += str(attrs[key]) + ","
-
+        # self.sample_state += "FN,"
         # TODO include more measures :colums
+
 
         # We include the fit
         if fit is not None:
@@ -443,31 +524,6 @@ class BowserManager():
         sim.metrics.flush()
         df = pd.read_csv(self.path_csv_traces + ".csv")
 
-        ## - Commented code of version 1, where the initial period was cached and equiv for all the actions.
-        # if start_moment == 0:
-        #     # Working with the baseline period
-        #     self.last_CSVpointer = len(df)  # We need to update this pointer for the next group of samples during the action.
-        #     if service["id"] not in self.stats_cache:
-        #         # print("\tGetting measures from %i to %i (future offset: %i)" % (start_moment, end_moment, self.last_CSVpointer))
-        #         df = df[:self.baseline_CSVpointer]
-        #         listOfRequests = self.__get_requests(sim, routing, service, df)
-        #         # TODO Include more metrics
-        #         stats = {"requests": listOfRequests}
-        #         self.stats_cache[service["id"]] = stats
-        #     else:
-        #         # print("\tGetting CACHED measures")
-        #         return self.stats_cache[service["id"]]
-        # else:
-        #     # Working with a specific period
-        #     # print("\tGetting measures from %i to %i(==%i)" % (self.last_CSVpointer, end_moment, len(df)))
-        #     df = df[self.last_CSVpointer:]
-        #     df = df[df["time_emit"]>=self.do_time]
-        #
-        #     listOfRequests = self.__get_requests(sim, routing, service, df)
-        #
-        #     # TODO Include more metrics
-        #     stats = {"requests": listOfRequests}
-
         df2 = df[self.last_CSVpointer:]
         df2 = df2[df2["time_emit"] >= self.do_time]
         self.last_CSVpointer = len(df)
@@ -482,12 +538,28 @@ class BowserManager():
         return stats
 
     def do_action(self, sim, operation, service):
+        self.available_HW_on_nodes = get_free_space_on_nodes(sim)
+        currentOccupation = dict(
+            [a, int(x)] for a, x in nx.get_node_attributes(G=sim.topology.G, name="HwReqs").items())
+
         if operation == "undeploy":
             # undeploy_module(sim, service) # We can ignore this operation since the State without this service is always all zeros.
             return True
 
         if operation in FLAVOURS:
             self.current_service["level"] = operation
+
+            target_node = self.current_service["node"]
+            total_space = currentOccupation[target_node]
+            free_space = self.available_HW_on_nodes[target_node]
+            self.current_service["DSTNode"] = {}
+            # self.current_service["DSTNode"]["DstHWTotal"] = total_space
+            self.current_service["DSTNode"]["DstNode"] = target_node
+            self.current_service["DSTNode"]["DstHWUsed"] = (total_space - free_space)
+            self.current_service["DSTNode"]["DstUtilization"] = (total_space - free_space) / total_space
+            # self.current_service["DSTNode"]["DstDegree"] = sim.topology.G.degree(target_node)
+            # self.current_service["DSTNode"]["DstCentrality"] = self.degree_centrality[target_node]
+            # self.current_service["DSTNode"]["DstConnectedUsers"] = len(self.node_with_users[target_node])
             modify_service_level(sim, self.current_service["des"], operation)
             return True
 
@@ -495,15 +567,30 @@ class BowserManager():
             # We get neighbours
             neighs = list(sim.topology.G.neighbors(self.current_service["node"]))
             # From that neighbours we filter the nodes with HW availability
-            service_HW = self.apps_level[self.current_service["app"]][self.current_service["level"]][1]
-            available_neighs = [n for n in neighs if self.available_HW_on_nodes[n] - service_HW >= 0]
+            # service_HW = self.apps_level[self.current_service["app"]][self.current_service["level"]][0]
+            # available_neighs = [n for n in neighs if self.available_HW_on_nodes[n] - service_HW >= 0]
 
-            if len(available_neighs) > 0:
-                target_node = np.random.choice(available_neighs, 1)[0]
+            # print("OPERATION MIGRATE")
+            # print(neighs)
+
+            if len(neighs) > 0:
+                target_node = np.random.choice(neighs, 1)[0]
+
+
+                total_space = currentOccupation[target_node]
+                free_space =  self.available_HW_on_nodes[target_node]
+                self.current_service["DSTNode"] = {}
+                self.current_service["DSTNode"]["DstNode"] = target_node
+                self.current_service["DSTNode"]["DstHWUsed"] = (total_space-free_space)
+                self.current_service["DSTNode"]["DstUtilization"] = (total_space-free_space) / total_space
+
                 undeploy_module(sim, service)
+
                 self.current_service["old_node"] = self.current_service["node"]
                 self.current_service["node"] = target_node
+
                 deploy_module(sim, service, node_dst=target_node)
+
                 return True
             else:
                 self.logger.warning("There are not available neighbours for migrate operation")
@@ -512,12 +599,31 @@ class BowserManager():
         if operation == "replicate":
             # We get neighbours
             neighs = list(sim.topology.G.neighbors(self.current_service["node"]))
-            # From that neighbours we filter the nodes with HW availability
-            service_HW = self.apps_level[self.current_service["app"]][self.current_service["level"]][1]
-            available_neighs = [n for n in neighs if self.available_HW_on_nodes[n] - service_HW >= 0]
 
-            if len(available_neighs) > 0:
-                target_node = np.random.choice(available_neighs, 1)[0]
+            # From that neighbours we filter the nodes with HW availability
+            # HWservice_HW = self.apps_level[self.current_service["app"]][self.current_service["level"]][0]
+            # available_neighs = [n for n in neighs if self.available_HW_on_nodes[n] - service_HW >= 0]
+
+
+            # print("OPERATION REPLICATE")
+            # print(neighs)
+
+            if len(neighs) > 0:
+                target_node = np.random.choice(neighs, 1)[0]
+
+                total_space = currentOccupation[target_node]
+                free_space =  self.available_HW_on_nodes[target_node]
+                self.current_service["DSTNode"] = {}
+                # self.current_service["DSTNode"]["DstHWTotal"] = total_space
+
+                self.current_service["DSTNode"]["DstNode"] = target_node
+                self.current_service["DSTNode"]["DstHWUsed"] = (total_space-free_space)
+                self.current_service["DSTNode"]["DstUtilization"] = (total_space-free_space) / total_space
+                # self.current_service["DSTNode"]["DstDegree"] = sim.topology.G.degree(target_node)
+                # self.current_service["DSTNode"]["DstCentrality"] = self.degree_centrality[target_node]
+                # self.current_service["DSTNode"]["DstConnectedUsers"] = len(self.node_with_users[target_node])
+
+
                 self.current_service["to_node"] = target_node
                 deploy_module(sim, service, node_dst=target_node, replicate=True)
                 return True
@@ -540,12 +646,12 @@ class BowserManager():
 
     def __get_requests(self, sim, routing, service, df, empty=False):
         if empty:
-            return {"diff_req_channels": 0,
-                    "req_channels": 0,
-                    "sum_req": 0,
-                    "avg_req": 0,
-                    "sum_lat": 0,
-                    "avg_lat": 0}
+            return {"DifReqChannels": 0,
+                    "TotReqChannels": 0,
+                    "SumRequests": 0,
+                    "AvgRequests": 0,
+                    "SumLat": 0,
+                    "AvgLat": 0}
 
         # df.to_csv("debug1.csv") # DEBUG
         df = df[df["DES.dst"] == service["des"]]
@@ -569,12 +675,12 @@ class BowserManager():
                         node_code = path[-2]
                     incomingNodes.add(node_code)
 
-            return {"diff_req_channels": len(incomingNodes),
-                    "req_channels": len(requests),
-                    "sum_req": np.sum(requests),
-                    "avg_req": np.mean(requests),
-                    "sum_lat": np.sum(latencies),
-                    "avg_lat": np.mean(latencies)}
+            return {"DifReqChannels": len(incomingNodes),
+                    "TotReqChannels": len(requests),
+                    "SumRequests": np.sum(requests),
+                    "AvgRequests": np.mean(requests),
+                    "SumLat": np.sum(latencies),
+                    "AvgLat": np.mean(latencies)}
         else:
             self.logger.warning("WARN - There are not new messages among users and service")
             return {}
@@ -583,7 +689,10 @@ class BowserManager():
 
         self.available_HW_on_nodes = get_free_space_on_nodes(sim)  # double check, but there're always space due to rules
 
-        node = sim.alloc_DES[service["des"]]
+        des = service["des"]
+        # if "clone_des" in service:  #In case of replication...
+        #     des = service["clone_des"]
+        node = sim.alloc_DES[des]
 
         degree = sim.topology.G.degree(node)
         HWtotal = float(sim.topology.G.nodes[node]["HwReqs"])
@@ -592,12 +701,13 @@ class BowserManager():
         nUsers = len(self.node_with_users[node])
 
         data = {}
-        data["HWtotal"] = HWtotal
-        data["HWfree"] = HWused
-        data["utilization"] = (HWtotal-HWused)/HWtotal
-        data["degree"] = degree
-        data["centrality"] = centrality
-        data["nusers"] = nUsers
+        # data["Node"] = node
+        data["HWTotal"] = HWtotal
+        data["HWUsed"] = HWused
+        data["Utilization"] = (HWtotal-HWused)/HWtotal
+        data["Degree"] = degree
+        data["Centrality"] = centrality
+        data["ConnectedUsers"] = nUsers
 
         return data
 

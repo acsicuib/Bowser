@@ -97,7 +97,7 @@ def generate_random_users_and_their_placements(maxNumberOfUsers):
         user["message"] = "M.USER.APP.%i" % app
         user["start"] = 0
         user["lambda"] = 100
-        user["id_resource"] = np.random.randint(0, len(t.G.nodes()) + 1)
+        user["id_resource"] = np.random.randint(0, len(t.G.nodes()))
         users.append(user)
     return users
 
@@ -163,7 +163,6 @@ if __name__ == '__main__':
         currentNumberOfSamples = 0
 
         file_samples = "samples.csv"
-
         write_header(temporal_folder + file_samples)
 
         while currentNumberOfSamples < minNumberOfSamples:
