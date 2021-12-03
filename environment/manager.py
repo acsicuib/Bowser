@@ -258,6 +258,8 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
 
 def adapt_fitness_v1(apps_level, current_service, Ostatus, Fstatus):
     list_supported_requests, max_flavour_name = maximun_Request_Level_byApp(apps_level, current_service["app"])
+    if "SumRequests" not in Fstatus["requests"]:
+        return 0.0
     current_requests = Fstatus["requests"]["SumRequests"]
 
     supported_ORequests = apps_level[current_service["app"]][current_service["old_level"]][1]
