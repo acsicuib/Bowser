@@ -90,13 +90,13 @@ def generate_random_services_and_allocations(graph,ratioServicesDeployedOnNodes,
 def generate_random_users_and_their_placements(maxNumberOfUsers):
     numberOfUsers = np.random.randint(1, maxNumberOfUsers)
     users = []
-    for i in range(maxNumberOfUsers):
+    for i in range(numberOfUsers):
         user = {}
         app = np.random.randint(1, len(apps) + 1)
         user["app"] = app
         user["message"] = "M.USER.APP.%i" % app
         user["start"] = 0
-        user["lambda"] = 100
+        user["lambda"] = np.random.randint(20,300)
         user["id_resource"] = np.random.randint(0, len(t.G.nodes()))
         users.append(user)
     return users

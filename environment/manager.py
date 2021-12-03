@@ -12,8 +12,9 @@ FLAVOURS = ["small", "medium", "large"]
 
 
 # NOTE: flavours/adapt operations should be at the end of this list
-OPERATIONS = ["small", "medium", "large"]
-OPERATIONS = ["undeploy", "replicate", "migrate", "small", "medium","large"]
+# OPERATIONS = ["none"]
+# OPERATIONS = ["small", "medium", "large"]
+OPERATIONS = ["undeploy", "replicate", "migrate", "none", "small", "medium","large"]
 
 # OPERATIONSIONS = ["undeploy", "small", "medium", "large"]
 # OPERATIONS = ["undeploy","replicate"]
@@ -155,6 +156,18 @@ def maximun_Request_Level_byApp(apps_level, app):
 
 
 def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
+    """
+     Notes:
+     - He olvidado tener en cuenta la latencia de la aplicación
+     -
+
+    :param apps_level:
+    :param current_service:
+    :param operation:
+    :param Ostatus:
+    :param Fstatus:
+    :return:
+    """
     # print("*" * 10)
     # print(Ostatus)
     # print(operation)
@@ -163,12 +176,20 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
     # print(apps_level)
 
 
+
+            # if ix_future_flavour > ix_best_flavour:
+            #     # print("It's good but it can be better")
+            #     numberFlavours = len(list_supported_requests)
+            #     return (numberFlavours - ix_future_flavour + ix_best_flavour) / numberFlavours
+
+
     if operation == "undeploy":
         if "DifReqChannels" in Ostatus["requests"]:
             if Ostatus["requests"]["DifReqChannels"] > 0:  # there are requests and the service goes out
                 return 0.0
             if Ostatus["requests"]["DifReqChannels"] == 0:
                 return 1.0
+
         else:
             return 1.0 #There was not requests
 
@@ -181,6 +202,32 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
     if "SumLat" not in Ostatus["requests"]:
         return 0.0
 
+    if operation == "none":
+        list_supported_requests, max_flavour_name = maximun_Request_Level_byApp(apps_level, current_service["app"])
+        current_requests = Fstatus["requests"]["SumRequests"]
+        #Both values should be the same:
+        supported_ORequests = apps_level[current_service["app"]][current_service["old_level"]][1]
+        supported_FRequests = apps_level[current_service["app"]][current_service["level"]][1]
+
+        predicate = lambda x: x >= current_requests
+        item = next(filter(predicate, list_supported_requests), None)
+        ix_future_flavour = list_supported_requests.index(supported_FRequests)
+
+        if item is not None:  # There is a level that supports the current flow of requests
+            ix_best_flavour = list_supported_requests.index(item)
+            if ix_future_flavour == ix_best_flavour: #The best flavour is the current one.
+                if Ostatus["requests"]["SumLat"]>0:
+                    return 0.5
+                else:
+                    return 1.0
+            if ix_future_flavour != ix_best_flavour:
+                return 0.0
+        else:
+            #Si hay opciones dentro del nodo, para adaptar o moverse devuelvo 0, sino 1
+            if Ostatus["requests"]["SumLat"] == 0: #Si estamos cerca del usuario, o quizás haya más espacio en el nodo.
+                return 0.5
+            else:
+                return 0.0
 
     if operation == "migrate":
         if "NextSumLat" in Fstatus["requests"]:
@@ -203,9 +250,6 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
         else:
             # Si la utilizacion es mayor que 1, pero solo hay un canal es mejor una migración
             return 0.0
-
-
-
 
     if operation in FLAVOURS:  # adapt to small
         # return adapt_fitness_v1(apps_level,current_service, Ostatus, Fstatus)
@@ -459,7 +503,7 @@ class BowserManager():
             SReq = self.apps_level[current_service["app"]][current_service["level"]][1]
             HWreq = self.apps_level[current_service["app"]][current_service["level"]][0]
 
-            if operation != "undeploy":
+            if operation != "undeploy" and operation != "none":
                 # self.sample_state += "NN,"
 
                 self.sample_state += str(self.current_service["DSTNode"]["DstHWUsed"])+ ","
@@ -546,6 +590,9 @@ class BowserManager():
             # undeploy_module(sim, service) # We can ignore this operation since the State without this service is always all zeros.
             return True
 
+        if operation == "none":
+            return True
+
         if operation in FLAVOURS:
             self.current_service["level"] = operation
 
@@ -575,9 +622,8 @@ class BowserManager():
 
             if len(neighs) > 0:
                 target_node = np.random.choice(neighs, 1)[0]
-
-
                 total_space = currentOccupation[target_node]
+
                 free_space =  self.available_HW_on_nodes[target_node]
                 self.current_service["DSTNode"] = {}
                 self.current_service["DSTNode"]["DstNode"] = target_node
@@ -634,6 +680,8 @@ class BowserManager():
     def undo_action(self, sim, operation, service):
         if operation == "undeploy":
             # deploy_module(sim, service)
+            pass
+        if operation == "none":
             pass
         if operation in FLAVOURS:
             self.current_service["level"] = self.current_service["old_level"]
