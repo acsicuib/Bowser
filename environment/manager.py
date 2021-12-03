@@ -252,8 +252,8 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
             return 0.0
 
     if operation in FLAVOURS:  # adapt to small
-        # return adapt_fitness_v1(apps_level,current_service, Ostatus, Fstatus)
-        return adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus)
+        return adapt_fitness_v1(apps_level,current_service, Ostatus, Fstatus)
+        #return adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus)
 
 
 def adapt_fitness_v1(apps_level, current_service, Ostatus, Fstatus):
@@ -314,7 +314,7 @@ def adapt_fitness_v2(apps_level, current_service, Ostatus, Fstatus):
 
     if item is not None:
         if supported_FRequests > item:  # This adaptation is over-dimensioned
-            return rate
+            return 1/rate
         else:
             return 1.0
     else:
