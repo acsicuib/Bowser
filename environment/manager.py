@@ -204,9 +204,9 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
 
     if operation == "none":
         list_supported_requests, max_flavour_name = maximun_Request_Level_byApp(apps_level, current_service["app"])
-        current_requests = Fstatus["requests"]["SumRequests"]
+        current_requests = Ostatus["requests"]["SumRequests"]
         #Both values should be the same:
-        supported_ORequests = apps_level[current_service["app"]][current_service["old_level"]][1]
+        # supported_ORequests = apps_level[current_service["app"]][current_service["old_level"]][1]
         supported_FRequests = apps_level[current_service["app"]][current_service["level"]][1]
 
         predicate = lambda x: x >= current_requests
