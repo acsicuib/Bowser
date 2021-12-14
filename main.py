@@ -87,7 +87,7 @@ def generate_random_services_and_allocations(graph,ratioServicesDeployedOnNodes,
 
     return {"initialAllocation":deploys}
 
-def generate_random_users_and_their_placements(maxNumberOfUsers):
+def generate_random_users_and_their_placements(maxNumberOfUsers,edgesNodes = None):
     numberOfUsers = np.random.randint(1, maxNumberOfUsers)
     users = []
     for i in range(numberOfUsers):
@@ -97,7 +97,10 @@ def generate_random_users_and_their_placements(maxNumberOfUsers):
         user["message"] = "M.USER.APP.%i" % app
         user["start"] = 0
         user["lambda"] = np.random.randint(20,300)
-        user["id_resource"] = np.random.randint(0, len(t.G.nodes()))
+        if edgesNodes == None:
+            user["id_resource"] = np.random.randint(0, len(t.G.nodes()))
+        else:
+            user["id_resource"] = np.random.choice(edgesNodes,1)[0]
         users.append(user)
     return users
 
@@ -107,7 +110,7 @@ if __name__ == '__main__':
 
     datestamp = "X"
 
-    fileName = "experiment_S.json"
+    fileName = "experiment_B.json"
     f = open(fileName,"r")
     experiments = json.load(f)
     f.close()
@@ -148,6 +151,12 @@ if __name__ == '__main__':
         dataNetwork = json.load(open(case_path + 'configuration/topology.json'))
         t.load_all_node_attr(dataNetwork)
         nx.write_gexf(t.G, temporal_folder + "topology.gexf") #debug
+
+        try:
+            strNodesEdges = (config.get('topology', 'edges'))
+            edgesNodes = [int(i) for i in strNodesEdges[1:-1].split(",")]
+        except:
+            edgesNodes = None
 
         # Applications
         dataApp = json.load(open(case_path + 'configuration/appDefinition.json'))
