@@ -14,7 +14,7 @@ FLAVOURS = ["small", "medium", "large"]
 # NOTE: flavours/adapt operations should be at the end of this list
 # OPERATIONS = ["none"]
 # OPERATIONS = ["small", "medium", "large"]
-OPERATIONS = ["undeploy", "replicate", "migrate", "none", "small", "medium","large"]
+OPERATIONS = ["undeploy", "replicate", "migrate","migrate","migrate","migrate", "none", "small", "medium","large"]
 
 # OPERATIONSIONS = ["undeploy", "small", "medium", "large"]
 # OPERATIONS = ["undeploy","replicate"]
@@ -230,9 +230,9 @@ def computeFitness(apps_level, current_service, operation, Ostatus, Fstatus):
                 return 0.0
 
     if operation == "migrate":
-        if "NextSumLat" in Fstatus["requests"]:
+        if "SumRequests" in Fstatus["requests"]:
             if Ostatus["requests"]["DifReqChannels"] == 1:
-                if Ostatus["requests"]["SumLat"] > Fstatus["requests"]["NextSumLat"]:
+                if Ostatus["requests"]["SumLat"] > Fstatus["requests"]["SumLat"]:
                     return 1.0
                 else:
                     return 0.0
@@ -479,6 +479,9 @@ class BowserManager():
                 # print("Undo TIME ", sim.env.now)
                 self.undo_action(sim, operation, self.current_service)
                 # sim.print_debug_assignaments()
+
+                if valueFit == 1.0 and operation == "undeploy":
+                    self.current_service = None #we stop cheking other operations since the only valid is undeploy
 
             self.current_ioperation += 1
             self.state = "DO"
