@@ -14,7 +14,7 @@ FLAVOURS = ["small", "medium", "large"]
 # NOTE: flavours/adapt operations should be at the end of this list
 # OPERATIONS = ["none"]
 # OPERATIONS = ["small", "medium", "large"]
-OPERATIONS = ["undeploy", "replicate", "migrate","migrate","migrate","migrate", "none", "small", "medium","large"]
+OPERATIONS = ["undeploy", "replicate", "replicate","replicate", "replicate","migrate","migrate","migrate","migrate", "none", "small", "medium","large"]
 
 # OPERATIONSIONS = ["undeploy", "small", "medium", "large"]
 # OPERATIONS = ["undeploy","replicate"]
