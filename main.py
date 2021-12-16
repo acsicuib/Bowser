@@ -87,7 +87,7 @@ def generate_random_services_and_allocations(graph,ratioServicesDeployedOnNodes,
 
     return {"initialAllocation":deploys}
 
-def generate_random_users_and_their_placements(maxNumberOfUsers,edgesNodes = None):
+def 200generate_random_users_and_their_placements(maxNumberOfUsers,edgesNodes = None):
     numberOfUsers = np.random.randint(1, maxNumberOfUsers)
     users = []
     for i in range(numberOfUsers):
