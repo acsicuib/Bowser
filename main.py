@@ -87,7 +87,7 @@ def generate_random_services_and_allocations(graph,ratioServicesDeployedOnNodes,
 
     return {"initialAllocation":deploys}
 
-def 200generate_random_users_and_their_placements(maxNumberOfUsers,edgesNodes = None):
+def generate_random_users_and_their_placements(maxNumberOfUsers,edgesNodes = None):
     numberOfUsers = np.random.randint(1, maxNumberOfUsers)
     users = []
     for i in range(numberOfUsers):
@@ -110,7 +110,7 @@ if __name__ == '__main__':
 
     datestamp = "X"
 
-    fileName = "experiment_B.json"
+    fileName = "experiment_S.json"
     f = open(fileName,"r")
     experiments = json.load(f)
     f.close()
