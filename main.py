@@ -110,7 +110,7 @@ if __name__ == '__main__':
 
     datestamp = "X"
 
-    fileName = "experiment_S.json"
+    fileName = "experiment_StB.json"
     f = open(fileName,"r")
     experiments = json.load(f)
     f.close()
